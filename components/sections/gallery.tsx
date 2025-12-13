@@ -155,7 +155,7 @@ export function Gallery() {
         </div>
 
         <p className={`${cormorant.className} text-xs sm:text-sm md:text-base text-white/95 font-light max-w-xl mx-auto leading-relaxed mt-3`}>
-          Soft, quiet frames from the days leading to December 20, 2025 at Daraga Church and Hotel St. Ellis — tiny echoes of the love and laughter we&apos;ll remember forever.
+          Soft, quiet frames from the days leading to March 06, 2026 at St. Augustine Parish Church, Mendez, Cavite and La Mariposa Tagaytay Events Place — tiny echoes of the love and laughter {coupleDisplayName} will remember forever.
         </p>
 
         <div className="flex items-center justify-center gap-2 mt-6">

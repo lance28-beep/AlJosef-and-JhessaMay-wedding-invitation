@@ -477,9 +477,7 @@ export function Hero() {
                 textShadow: "0 0 24px rgba(0,0,0,0.9)",
               }}
             >
-              <span className="block">{groomName}</span>
-              <span className="block">&</span>
-              <span className="block">{brideName}</span>
+              {groomName} & {brideName}
             </h1>
           </div>
 
