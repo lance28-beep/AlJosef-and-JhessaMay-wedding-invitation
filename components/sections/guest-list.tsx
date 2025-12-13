@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Section } from "@/components/section"
 import {
   Search,
@@ -32,11 +32,10 @@ interface Guest {
 
 export function GuestList() {
   const [guests, setGuests] = useState<Guest[]>([])
-  const [filteredGuests, setFilteredGuests] = useState<Guest[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isSearching, setIsSearching] = useState(false)
+  const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -52,49 +51,88 @@ export function GuestList() {
     Message: "",
   })
 
-  const searchRef = useRef<HTMLDivElement>(null)
-
   // Fetch all guests on component mount
   useEffect(() => {
     fetchGuests()
   }, [])
 
-  // Filter guests based on search query
-  // Strict sequence matching: only show suggestions after 4 characters
-  // Must match from the start of the name (not substring in middle)
-  useEffect(() => {
-    if (!searchQuery.trim() || searchQuery.trim().length < 4) {
-      setFilteredGuests([])
-      setIsSearching(false)
-      return
+  // Normalize name: lowercase, remove special chars, trim spaces
+  const normalizeName = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '') // Remove special characters
+      .replace(/\s+/g, ' ')    // Normalize spaces
+      .trim()
+  }
+
+  // Levenshtein Distance algorithm for fuzzy matching
+  const levenshteinDistance = (str1: string, str2: string): number => {
+    const matrix: number[][] = []
+
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i]
     }
 
-    const query = searchQuery.toLowerCase().trim()
-    
-    // Strict sequence matching from the start
-    const filtered = guests.filter((guest) => {
-      const guestName = guest.Name.toLowerCase()
-      // Check if guest name starts with the query sequence
-      return guestName.startsWith(query)
-    })
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j
+    }
 
-    setFilteredGuests(filtered)
-    setIsSearching(filtered.length > 0)
-  }, [searchQuery, guests])
-
-  // Close search dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setIsSearching(false)
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1]
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1,     // insertion
+            matrix[i - 1][j] + 1      // deletion
+          )
+        }
       }
     }
 
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
+    return matrix[str2.length][str1.length]
+  }
+
+  // Calculate similarity percentage
+  const calculateSimilarity = (str1: string, str2: string): number => {
+    const normalized1 = normalizeName(str1)
+    const normalized2 = normalizeName(str2)
+    
+    const distance = levenshteinDistance(normalized1, normalized2)
+    const maxLength = Math.max(normalized1.length, normalized2.length)
+    
+    if (maxLength === 0) return 100
+    
+    const similarity = ((maxLength - distance) / maxLength) * 100
+    return similarity
+  }
+
+  // Find matching guest with fuzzy matching (90% threshold)
+  const findMatchingGuest = (inputName: string): Guest | null => {
+    const normalizedInput = normalizeName(inputName)
+    
+    // First, try exact match
+    const exactMatch = guests.find(guest => 
+      normalizeName(guest.Name) === normalizedInput
+    )
+    if (exactMatch) return exactMatch
+
+    // Then try fuzzy matching with 90% threshold
+    let bestMatch: Guest | null = null
+    let bestSimilarity = 0
+
+    for (const guest of guests) {
+      const similarity = calculateSimilarity(inputName, guest.Name)
+      
+      if (similarity >= 90 && similarity > bestSimilarity) {
+        bestSimilarity = similarity
+        bestMatch = guest
+      }
     }
-  }, [])
+
+    return bestMatch
+  }
 
   const fetchGuests = async () => {
     setIsLoading(true)
@@ -114,27 +152,61 @@ export function GuestList() {
     }
   }
 
-  const handleSearchSelect = (guest: Guest) => {
-    setSelectedGuest(guest)
-    setSearchQuery(guest.Name)
-    setIsSearching(false)
+  const handleConfirmRSVP = async () => {
+    // Clear previous errors
+    setError(null)
     
-    // Set form data with existing guest info
-    setFormData({
-      Name: guest.Name,
-      Email: guest.Email && guest.Email !== "Pending" ? guest.Email : "",
-      RSVP: guest.RSVP || "",
-      Guest: guest.Guest && guest.Guest !== "" ? guest.Guest : "1",
-      Message: guest.Message || "",
-    })
-    
-    // Check if guest has already responded
-    setHasResponded(!!(guest.RSVP && guest.RSVP.trim() !== ""))
-  }
-  
-  const handleConfirmRSVP = () => {
-    if (!selectedGuest) return
-    setModalStep('form')
+    // Validate input
+    if (!searchQuery.trim()) {
+      setError("Please enter your name")
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    if (searchQuery.trim().length < 3) {
+      setError("Please enter your full name")
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    setIsValidating(true)
+
+    // Simulate a brief delay for better UX (prevents instant feedback that might look glitchy)
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    try {
+      // Find matching guest using fuzzy matching
+      const matchedGuest = findMatchingGuest(searchQuery)
+
+      if (!matchedGuest) {
+        setError("We couldn't find your name. Please check the spelling or contact us.")
+        setTimeout(() => setError(null), 5000)
+        setIsValidating(false)
+        return
+      }
+
+      // Guest found - set data and proceed to form
+      setSelectedGuest(matchedGuest)
+      setFormData({
+        Name: matchedGuest.Name,
+        Email: matchedGuest.Email && matchedGuest.Email !== "Pending" ? matchedGuest.Email : "",
+        RSVP: matchedGuest.RSVP || "",
+        Guest: matchedGuest.Guest && matchedGuest.Guest !== "" ? matchedGuest.Guest : "1",
+        Message: matchedGuest.Message || "",
+      })
+
+      // Check if guest has already responded
+      setHasResponded(!!(matchedGuest.RSVP && matchedGuest.RSVP.trim() !== ""))
+      
+      // Move to form step
+      setModalStep('form')
+    } catch (error) {
+      console.error("Error validating guest:", error)
+      setError("An error occurred. Please try again.")
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setIsValidating(false)
+    }
   }
   
   const handleOpenModal = () => {
@@ -216,7 +288,7 @@ export function GuestList() {
     setFormData({ Name: "", Email: "", RSVP: "", Guest: "1", Message: "" })
     setHasResponded(false)
     setError(null)
-    setIsSearching(false)
+    setIsValidating(false)
   }
 
   return (
@@ -296,77 +368,66 @@ export function GuestList() {
                   {/* Modal Content - Search */}
                   <div className="p-3 sm:p-4 md:p-5 lg:p-6 overflow-y-auto flex-1 min-h-0">
                     <p className="text-xs sm:text-sm md:text-base text-[#243127] mb-3 sm:mb-4 md:mb-5 leading-relaxed">
-                      Please search for your name and confirm your RSVP.<br />
+                      Please enter your full name to confirm your RSVP.<br />
                       <span className="text-[#E0B4B1] text-[10px] sm:text-xs md:text-sm">
                         If you cannot find your name, please contact us.
                       </span>
                     </p>
 
-                    <div ref={searchRef} className="relative mb-4 sm:mb-5 md:mb-6">
+                    <div className="relative mb-4 sm:mb-5 md:mb-6">
                       <label className="block text-xs sm:text-sm font-semibold text-[#243127] mb-1.5 sm:mb-2 font-sans">
-                        Search Name
+                        Full Name
                       </label>
                       <div className="relative">
-                        <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#D2A4A4]/70 pointer-events-none transition-colors duration-200" />
+                        <User className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#D2A4A4]/70 pointer-events-none transition-colors duration-200" />
                         <input
                           type="text"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Type at least 4 characters..."
-                          className="w-full pl-8 sm:pl-10 pr-2.5 sm:pr-3 py-2 sm:py-2.5 md:py-3 border-2 border-[#F7E6CA]/60 focus:border-[#D2A4A4] rounded-lg text-xs sm:text-sm font-sans text-[#243127] placeholder:text-[#E0B4B1]/70 transition-all duration-300 hover:border-[#D2A4A4]/70 focus:ring-2 focus:ring-[#D2A4A4]/20 bg-white shadow-sm focus:shadow-md"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && !isValidating) {
+                              handleConfirmRSVP()
+                            }
+                          }}
+                          placeholder="Enter your full name..."
+                          disabled={isValidating}
+                          className="w-full pl-8 sm:pl-10 pr-2.5 sm:pr-3 py-2 sm:py-2.5 md:py-3 border-2 border-[#F7E6CA]/60 focus:border-[#D2A4A4] rounded-lg text-xs sm:text-sm font-sans text-[#243127] placeholder:text-[#E0B4B1]/70 transition-all duration-300 hover:border-[#D2A4A4]/70 focus:ring-2 focus:ring-[#D2A4A4]/20 bg-white shadow-sm focus:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </div>
-                      
-                      {/* Autocomplete dropdown */}
-                      {isSearching && filteredGuests.length > 0 && (
-                        <div className="absolute z-[9999] w-full mt-1 sm:mt-1.5 md:mt-2 bg-white border border-[#F7E6CA]/70 rounded-lg shadow-xl max-h-48 sm:max-h-60 overflow-y-auto">
-                          {filteredGuests.map((guest, index) => (
-                            <button
-                              key={index}
-                              onClick={() => handleSearchSelect(guest)}
-                              className="w-full px-2.5 sm:px-3 py-2 sm:py-2.5 text-left hover:bg-[#F0F0EE]/40 active:bg-[#F7E6CA]/40 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-b border-[#F7E6CA]/40 last:border-b-0 group"
-                            >
-                              <div className="relative flex-shrink-0">
-                                <div className="bg-[#D2A4A4] p-1 sm:p-1.5 rounded-full shadow-sm group-hover:shadow-md transition-all duration-300">
-                                  <User className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
-                                </div>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-xs sm:text-sm text-[#243127] group-hover:text-[#D2A4A4] transition-colors duration-200 truncate">
-                                  {guest.Name}
-                                </div>
-                              </div>
-                              <div className="text-[#E0B4B1]/70 group-hover:text-[#D2A4A4] group-hover:translate-x-1 transition-all duration-200 flex-shrink-0">
-                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {searchQuery.length >= 4 && filteredGuests.length === 0 && !isSearching && (
-                        <div className="mt-2 text-xs sm:text-sm text-[#E0B4B1] italic">
-                          No guests found. Please check the spelling or contact us.
-                        </div>
-                      )}
                     </div>
+
+                    {/* Error message */}
+                    {error && (
+                      <div className="mb-4 bg-red-50 border-2 border-red-200 rounded-lg p-2.5 sm:p-3">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-600 flex-shrink-0" />
+                          <span className="text-red-600 font-semibold text-[10px] sm:text-xs md:text-sm">{error}</span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Action Buttons */}
                     <div className="flex gap-2 sm:gap-3 pt-2">
                       <button
                         onClick={handleCloseModal}
-                        className="flex-1 bg-white border-2 border-[#F7E6CA] text-[#243127] py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 hover:bg-[#F0F0EE] hover:border-[#D2A4A4]"
+                        disabled={isValidating}
+                        className="flex-1 bg-white border-2 border-[#F7E6CA] text-[#243127] py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 hover:bg-[#F0F0EE] hover:border-[#D2A4A4] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={handleConfirmRSVP}
-                        disabled={!selectedGuest}
-                        className="flex-1 !bg-[#D2A4A4] hover:!bg-[#E0B4B1] text-white py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={isValidating || !searchQuery.trim()}
+                        className="flex-1 !bg-[#D2A4A4] hover:!bg-[#E0B4B1] text-white py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 sm:gap-2"
                       >
-                        Confirm RSVP
+                        {isValidating ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+                            <span>Validating...</span>
+                          </>
+                        ) : (
+                          "Confirm RSVP"
+                        )}
                       </button>
                     </div>
                   </div>
