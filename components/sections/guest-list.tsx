@@ -40,6 +40,7 @@ export function GuestList() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [modalStep, setModalStep] = useState<'search' | 'form'>('search')
   const [hasResponded, setHasResponded] = useState(false)
 
   // Form state
@@ -59,17 +60,23 @@ export function GuestList() {
   }, [])
 
   // Filter guests based on search query
+  // Strict sequence matching: only show suggestions after 4 characters
+  // Must match from the start of the name (not substring in middle)
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() || searchQuery.trim().length < 4) {
       setFilteredGuests([])
       setIsSearching(false)
       return
     }
 
-    const query = searchQuery.toLowerCase()
-    const filtered = guests.filter((guest) =>
-      guest.Name.toLowerCase().includes(query)
-    )
+    const query = searchQuery.toLowerCase().trim()
+    
+    // Strict sequence matching from the start
+    const filtered = guests.filter((guest) => {
+      const guestName = guest.Name.toLowerCase()
+      // Check if guest name starts with the query sequence
+      return guestName.startsWith(query)
+    })
 
     setFilteredGuests(filtered)
     setIsSearching(filtered.length > 0)
@@ -123,9 +130,16 @@ export function GuestList() {
     
     // Check if guest has already responded
     setHasResponded(!!(guest.RSVP && guest.RSVP.trim() !== ""))
-    
-    // Show modal
+  }
+  
+  const handleConfirmRSVP = () => {
+    if (!selectedGuest) return
+    setModalStep('form')
+  }
+  
+  const handleOpenModal = () => {
     setShowModal(true)
+    setModalStep('search')
   }
 
   const handleFormChange = (
@@ -140,13 +154,6 @@ export function GuestList() {
 
     if (!formData.RSVP) {
       setError("Please select if you can attend")
-      setTimeout(() => setError(null), 5000)
-      return
-    }
-
-    // Validate guest count if attending
-    if (formData.RSVP === "Yes" && (!formData.Guest || parseInt(formData.Guest) < 1)) {
-      setError("Please enter the number of guests (minimum 1)")
       setTimeout(() => setError(null), 5000)
       return
     }
@@ -186,6 +193,7 @@ export function GuestList() {
       // Close modal and reset after showing success
       setTimeout(() => {
         setShowModal(false)
+        setModalStep('search')
         setSearchQuery("")
         setSelectedGuest(null)
         setSuccess(null)
@@ -202,157 +210,201 @@ export function GuestList() {
 
   const handleCloseModal = () => {
     setShowModal(false)
+    setModalStep('search')
     setSelectedGuest(null)
     setSearchQuery("")
     setFormData({ Name: "", Email: "", RSVP: "", Guest: "1", Message: "" })
     setHasResponded(false)
     setError(null)
+    setIsSearching(false)
   }
 
   return (
     <Section id="guest-list" className="relative z-30 py-6 sm:py-10 md:py-12 lg:py-16">
-      {/* Header */}
-      <div className="relative z-10 text-center mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-2 sm:px-3 md:px-4">
-        {/* Small label */}
-        <p
-          className={`${cormorant.className} text-[0.7rem] sm:text-xs md:text-sm uppercase tracking-[0.28em] text-white mb-2`}
-          style={{ textShadow: "0 2px 10px rgba(0,0,0,0.8)" }}
-        >
-          Confirm Your Attendance
-        </p>
-        
-        <h2
-          className="style-script-regular text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white mb-1.5 sm:mb-3 md:mb-4"
-          style={{ textShadow: "0 4px 18px rgba(0,0,0,0.85)" }}
-        >
-          RSVP
-        </h2>
-        
-        <p className={`${cormorant.className} text-xs sm:text-sm md:text-base text-white/90 font-light max-w-xl mx-auto leading-relaxed px-2 mb-2 sm:mb-3`}>
-          Please search for your name below to confirm your presence at our special day
-        </p>
-        
-        {/* Decorative element below subtitle */}
-        <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-2 sm:mt-3 md:mt-4 lg:mt-5">
-          <div className="w-6 sm:w-8 md:w-12 lg:w-16 h-px bg-gradient-to-r from-transparent via-[#E9D5C3] to-transparent" />
-          <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#F7E6CA]/90 rounded-full" />
-          <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-white/85 rounded-full" />
-          <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#F7E6CA]/90 rounded-full" />
-          <div className="w-6 sm:w-8 md:w-12 lg:w-16 h-px bg-gradient-to-l from-transparent via-[#E9D5C3] to-transparent" />
-        </div>
-      </div>
-
-      {/* Search Section */}
-      <div className="relative z-10 max-w-2xl mx-auto px-2 sm:px-4 md:px-6 overflow-visible">
-        {/* Card with elegant border */}
-        <div className="relative bg-white/10 backdrop-blur-md border border-[#F7E6CA]/60 rounded-lg sm:rounded-xl md:rounded-2xl shadow-lg overflow-visible">
-          {/* Card content */}
-          <div className="relative p-2.5 sm:p-4 md:p-5 lg:p-6 overflow-visible">
-            <div className="relative z-10 space-y-3 sm:space-y-4 overflow-visible">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="bg-[#D2A4A4] p-1.5 sm:p-2 rounded-lg shadow-md">
-                  <Search className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-white" />
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm md:text-base font-semibold text-white font-sans mb-0.5 sm:mb-1">
-                    Find Your Name
-                  </label>
-                  <p className="text-[10px] sm:text-xs text-white/80 font-sans">
-                    Type as you search to see instant results
-                  </p>
-                </div>
-              </div>
-              <div ref={searchRef} className="relative z-[100]">
-                <div className="relative">
-                  <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#D2A4A4]/70 pointer-events-none transition-colors duration-200" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Type your name..."
-                    className="w-full pl-8 sm:pl-10 pr-2.5 sm:pr-3 py-2 sm:py-2.5 md:py-3 border-2 border-[#F7E6CA]/60 focus:border-[#D2A4A4] rounded-lg text-xs sm:text-sm font-sans text-[#243127] placeholder:text-[#E0B4B1]/70 transition-all duration-300 hover:border-[#D2A4A4]/70 focus:ring-2 focus:ring-[#D2A4A4]/20 bg-white shadow-sm focus:shadow-md"
-                  />
-                </div>
-                {/* Autocomplete dropdown */}
-                {isSearching && filteredGuests.length > 0 && (
-                  <div 
-                    className="absolute z-[9999] w-full mt-1 sm:mt-1.5 md:mt-2 bg-white/95 backdrop-blur-lg border border-[#F7E6CA]/70 rounded-lg sm:rounded-xl shadow-xl overflow-hidden" 
-                    style={{ 
-                      position: 'absolute', 
-                      top: '100%',
-                      left: 0,
-                      right: 0
-                    }}
-                  >
-                    {filteredGuests.map((guest, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleSearchSelect(guest)}
-                        className="w-full px-2.5 sm:px-3 py-2 sm:py-2.5 text-left hover:bg-[#F0F0EE]/40 active:bg-[#F7E6CA]/40 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-b border-[#F7E6CA]/40 last:border-b-0 group"
-                      >
-                        <div className="relative flex-shrink-0">
-                          <div className="bg-[#D2A4A4] p-1 sm:p-1.5 rounded-full shadow-sm group-hover:shadow-md transition-all duration-300">
-                            <User className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-xs sm:text-sm text-[#243127] group-hover:text-[#D2A4A4] transition-colors duration-200 truncate">
-                            {guest.Name}
-                          </div>
-                          {guest.Email && guest.Email !== "Pending" && (
-                            <div className="text-[10px] sm:text-xs text-[#E0B4B1]/80 truncate mt-0.5">
-                              {guest.Email}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-[#E0B4B1]/70 group-hover:text-[#D2A4A4] group-hover:translate-x-1 transition-all duration-200 flex-shrink-0">
-                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+      {/* Glass Effect Container */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8">
+        <div className="relative backdrop-blur-xl bg-white/60 border border-white/50 rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12">
+          {/* Header */}
+          <div className="relative z-10 text-center">
+            <h2
+              className="style-script-regular text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-black mb-3 sm:mb-4 md:mb-5"
+            >
+              We Reserved Seats for You!
+            </h2>
+            
+            <p className={`${cormorant.className} text-sm sm:text-base md:text-lg text-black/90 font-light max-w-2xl mx-auto leading-relaxed px-2 mb-3 sm:mb-4`}>
+              We have chosen to have a small and intimate wedding ceremony.<br />
+              Only those closest to us will be in attendance.
+            </p>
+            
+            <p className={`${cormorant.className} text-xs sm:text-sm md:text-base text-black/85 font-medium max-w-xl mx-auto px-2 mb-4 sm:mb-5`}>
+              Kindly confirm your presence on or before:<br />
+              <span className="text-[#8B4513] font-bold text-base sm:text-lg md:text-xl">October 10, 2025</span>
+            </p>
+            
+            {/* Decorative element */}
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-4 sm:mb-5 md:mb-6">
+              <div className="w-6 sm:w-8 md:w-12 lg:w-16 h-px bg-gradient-to-r from-transparent via-[#E9D5C3] to-transparent" />
+              <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#F7E6CA]/90 rounded-full" />
+              <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-white/85 rounded-full" />
+              <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#F7E6CA]/90 rounded-full" />
+              <div className="w-6 sm:w-8 md:w-12 lg:w-16 h-px bg-gradient-to-l from-transparent via-[#E9D5C3] to-transparent" />
             </div>
+            
+            {/* RSVP Button */}
+            <button
+              onClick={handleOpenModal}
+              className="!bg-[#D2A4A4] hover:!bg-[#E0B4B1] text-white px-8 sm:px-10 md:px-12 py-3 sm:py-3.5 md:py-4 rounded-full text-sm sm:text-base md:text-lg font-semibold shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105"
+            >
+              RSVP
+            </button>
           </div>
         </div>
       </div>
+
 
       {/* RSVP Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-2 md:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
             <div className="relative w-full max-w-md sm:max-w-lg mx-1 sm:mx-2 md:mx-4 bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-[#F7E6CA]/80 overflow-hidden animate-in zoom-in-95 duration-300 max-h-[95vh] flex flex-col">
-              {/* Modal Header */}
-              <div className="relative bg-[#D2A4A4] p-3 sm:p-4 md:p-5 lg:p-6 flex-shrink-0">
-                <div className="relative flex items-start justify-between gap-1.5 sm:gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 mb-1 sm:mb-1.5 md:mb-2 lg:mb-3">
-                      <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <Heart className="h-2.5 w-2.5 sm:h-3 sm:w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 text-white" />
+              
+              {/* Step 1: Guest Search */}
+              {modalStep === 'search' && (
+                <>
+                  {/* Modal Header */}
+                  <div className="relative bg-[#D2A4A4] p-3 sm:p-4 md:p-5 lg:p-6 flex-shrink-0">
+                    <div className="relative flex items-start justify-between gap-1.5 sm:gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 mb-1 sm:mb-1.5 md:mb-2">
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Search className="h-2.5 w-2.5 sm:h-3 sm:w-3 md:h-4 md:w-4 text-white" />
+                          </div>
+                          <h3 className="style-script-regular text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-white">
+                            Find Your Name
+                          </h3>
+                        </div>
                       </div>
-                      <h3 className="text-sm sm:text-base md:text-xl lg:text-2xl xl:text-3xl font-serif font-bold text-white truncate">
-                        You're Invited!
-                      </h3>
+                      <button
+                        onClick={handleCloseModal}
+                        className="text-white/80 hover:text-white transition-colors p-0.5 sm:p-1 md:p-2 hover:bg-white/20 rounded-full flex-shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+                      </button>
                     </div>
-                    <p className="text-white/95 text-[10px] sm:text-xs md:text-sm lg:text-base xl:text-lg font-sans leading-tight sm:leading-normal">
-                      Hello <span className="font-extrabold text-[#FFFFFF] drop-shadow-[0_1px_6px_rgba(102,105,86,0.55)]">{selectedGuest?.Name}</span>, you are invited to our wedding!
-                    </p>
                   </div>
-                  {!hasResponded && (
-                    <button
-                      onClick={handleCloseModal}
-                      className="text-white/80 hover:text-white transition-colors p-0.5 sm:p-1 md:p-2 hover:bg-white/20 rounded-full flex-shrink-0"
-                    >
-                      <X className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
-                    </button>
-                  )}
-                </div>
-              </div>
 
-              {/* Modal Content */}
-              <div className="p-2.5 sm:p-3 md:p-4 lg:p-5 xl:p-6 overflow-y-auto flex-1 min-h-0">
+                  {/* Modal Content - Search */}
+                  <div className="p-3 sm:p-4 md:p-5 lg:p-6 overflow-y-auto flex-1 min-h-0">
+                    <p className="text-xs sm:text-sm md:text-base text-[#243127] mb-3 sm:mb-4 md:mb-5 leading-relaxed">
+                      Please search for your name and confirm your RSVP.<br />
+                      <span className="text-[#E0B4B1] text-[10px] sm:text-xs md:text-sm">
+                        If you cannot find your name, please contact us.
+                      </span>
+                    </p>
+
+                    <div ref={searchRef} className="relative mb-4 sm:mb-5 md:mb-6">
+                      <label className="block text-xs sm:text-sm font-semibold text-[#243127] mb-1.5 sm:mb-2 font-sans">
+                        Search Name
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#D2A4A4]/70 pointer-events-none transition-colors duration-200" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Type at least 4 characters..."
+                          className="w-full pl-8 sm:pl-10 pr-2.5 sm:pr-3 py-2 sm:py-2.5 md:py-3 border-2 border-[#F7E6CA]/60 focus:border-[#D2A4A4] rounded-lg text-xs sm:text-sm font-sans text-[#243127] placeholder:text-[#E0B4B1]/70 transition-all duration-300 hover:border-[#D2A4A4]/70 focus:ring-2 focus:ring-[#D2A4A4]/20 bg-white shadow-sm focus:shadow-md"
+                        />
+                      </div>
+                      
+                      {/* Autocomplete dropdown */}
+                      {isSearching && filteredGuests.length > 0 && (
+                        <div className="absolute z-[9999] w-full mt-1 sm:mt-1.5 md:mt-2 bg-white border border-[#F7E6CA]/70 rounded-lg shadow-xl max-h-48 sm:max-h-60 overflow-y-auto">
+                          {filteredGuests.map((guest, index) => (
+                            <button
+                              key={index}
+                              onClick={() => handleSearchSelect(guest)}
+                              className="w-full px-2.5 sm:px-3 py-2 sm:py-2.5 text-left hover:bg-[#F0F0EE]/40 active:bg-[#F7E6CA]/40 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-b border-[#F7E6CA]/40 last:border-b-0 group"
+                            >
+                              <div className="relative flex-shrink-0">
+                                <div className="bg-[#D2A4A4] p-1 sm:p-1.5 rounded-full shadow-sm group-hover:shadow-md transition-all duration-300">
+                                  <User className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-xs sm:text-sm text-[#243127] group-hover:text-[#D2A4A4] transition-colors duration-200 truncate">
+                                  {guest.Name}
+                                </div>
+                              </div>
+                              <div className="text-[#E0B4B1]/70 group-hover:text-[#D2A4A4] group-hover:translate-x-1 transition-all duration-200 flex-shrink-0">
+                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {searchQuery.length >= 4 && filteredGuests.length === 0 && !isSearching && (
+                        <div className="mt-2 text-xs sm:text-sm text-[#E0B4B1] italic">
+                          No guests found. Please check the spelling or contact us.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 sm:gap-3 pt-2">
+                      <button
+                        onClick={handleCloseModal}
+                        className="flex-1 bg-white border-2 border-[#F7E6CA] text-[#243127] py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 hover:bg-[#F0F0EE] hover:border-[#D2A4A4]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleConfirmRSVP}
+                        disabled={!selectedGuest}
+                        className="flex-1 !bg-[#D2A4A4] hover:!bg-[#E0B4B1] text-white py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Confirm RSVP
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Step 2: RSVP Form */}
+              {modalStep === 'form' && (
+                <>
+                  {/* Modal Header */}
+                  <div className="relative bg-[#D2A4A4] p-3 sm:p-4 md:p-5 lg:p-6 flex-shrink-0">
+                    <div className="relative flex items-start justify-between gap-1.5 sm:gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 mb-1 sm:mb-1.5 md:mb-2 lg:mb-3">
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Heart className="h-2.5 w-2.5 sm:h-3 sm:w-3 md:h-4 md:w-4 lg:h-5 lg:w-5 text-white" />
+                          </div>
+                          <h3 className="style-script-regular text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-white">
+                            You're Invited!
+                          </h3>
+                        </div>
+                        <p className="text-white/95 text-[10px] sm:text-xs md:text-sm lg:text-base xl:text-lg font-sans leading-tight sm:leading-normal">
+                          Hello <span className="font-extrabold text-[#FFFFFF] drop-shadow-[0_1px_6px_rgba(102,105,86,0.55)]">{selectedGuest?.Name}</span>, you are invited to our wedding!
+                        </p>
+                      </div>
+                      {!hasResponded && (
+                        <button
+                          onClick={handleCloseModal}
+                          className="text-white/80 hover:text-white transition-colors p-0.5 sm:p-1 md:p-2 hover:bg-white/20 rounded-full flex-shrink-0"
+                        >
+                          <X className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Modal Content */}
+                  <div className="p-2.5 sm:p-3 md:p-4 lg:p-5 xl:p-6 overflow-y-auto flex-1 min-h-0">
                 {hasResponded ? (
                   // Thank you message for guests who already responded
                   <div className="text-center py-3 sm:py-4 md:py-6">
@@ -518,8 +570,8 @@ export function GuestList() {
                     <div className="pt-2 sm:pt-3">
                       <button
                         type="submit"
-                        disabled={isLoading}
-                        className="w-full !bg-[#D2A4A4] hover:!bg-[#E0B4B1] text-white py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold shadow-md transition-all duration-300 hover:shadow-lg disabled:opacity-70 flex items-center justify-center gap-1.5 sm:gap-2"
+                        disabled={isLoading || !formData.RSVP}
+                        className="w-full !bg-[#D2A4A4] hover:!bg-[#E0B4B1] text-white py-2 sm:py-2.5 md:py-3 rounded-lg text-xs sm:text-sm font-semibold shadow-md transition-all duration-300 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 sm:gap-2"
                       >
                         {isLoading ? (
                           <>
@@ -536,72 +588,74 @@ export function GuestList() {
                     </div>
                   </form>
                 )}
-              </div>
+                  </div>
 
-              {/* Enhanced Success Overlay */}
-              {success && (
-                <div className="absolute inset-0 bg-[#D2A4A4]/98 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300 p-2 sm:p-3 md:p-4">
-                  <div className="text-center p-3 sm:p-4 md:p-5 lg:p-6 max-w-sm mx-auto">
-                    {/* Enhanced Icon Circle */}
-                    <div className="relative inline-flex items-center justify-center mb-3 sm:mb-4">
-                      {/* Animated rings */}
-                      <div className="absolute inset-0 rounded-full border-2 border-white/20 animate-ping" />
-                      <div className="absolute inset-0 rounded-full border-2 border-white/30" />
-                      {/* Icon container */}
-                      <div className="relative w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-20 lg:h-20 bg-white rounded-full flex items-center justify-center shadow-xl">
-                        <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-[#D2A4A4]" strokeWidth={2.5} />
+                  {/* Enhanced Success Overlay */}
+                  {success && (
+                    <div className="absolute inset-0 bg-[#D2A4A4]/98 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300 p-2 sm:p-3 md:p-4">
+                      <div className="text-center p-3 sm:p-4 md:p-5 lg:p-6 max-w-sm mx-auto">
+                        {/* Enhanced Icon Circle */}
+                        <div className="relative inline-flex items-center justify-center mb-3 sm:mb-4">
+                          {/* Animated rings */}
+                          <div className="absolute inset-0 rounded-full border-2 border-white/20 animate-ping" />
+                          <div className="absolute inset-0 rounded-full border-2 border-white/30" />
+                          {/* Icon container */}
+                          <div className="relative w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-20 lg:h-20 bg-white rounded-full flex items-center justify-center shadow-xl">
+                            <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-[#D2A4A4]" strokeWidth={2.5} />
+                          </div>
+                        </div>
+                        
+                        {/* Title */}
+                        <h4 className="text-base sm:text-lg md:text-xl lg:text-2xl font-serif font-bold text-white mb-2 sm:mb-3">
+                          RSVP Confirmed!
+                        </h4>
+                        
+                        {/* Message based on RSVP response */}
+                        {formData.RSVP === "Yes" && (
+                          <div className="space-y-1 sm:space-y-1.5 mb-2 sm:mb-3">
+                            <p className="text-white/95 text-xs sm:text-sm font-medium">
+                              We're thrilled you'll be joining us!
+                            </p>
+                            <p className="text-white/80 text-[10px] sm:text-xs">
+                              Your response has been recorded
+                            </p>
+                          </div>
+                        )}
+                        {formData.RSVP === "No" && (
+                          <p className="text-white/90 text-xs sm:text-sm mb-2 sm:mb-3">
+                            We'll miss you, but thank you for letting us know.
+                          </p>
+                        )}
+                        {!formData.RSVP && (
+                          <p className="text-white/90 text-xs sm:text-sm mb-2 sm:mb-3">
+                            Thank you for your response!
+                          </p>
+                        )}
+                        
+                        {/* Subtle closing indicator */}
+                        <div className="flex items-center justify-center gap-1 sm:gap-1.5 mt-2 sm:mt-3">
+                          <div className="w-0.5 h-0.5 sm:w-1 sm:h-1 bg-white/60 rounded-full animate-pulse" />
+                          <p className="text-white/70 text-[10px] sm:text-xs">
+                            This will close automatically
+                          </p>
+                          <div className="w-0.5 h-0.5 sm:w-1 sm:h-1 bg-white/60 rounded-full animate-pulse" />
+                        </div>
                       </div>
                     </div>
-                    
-                    {/* Title */}
-                    <h4 className="text-base sm:text-lg md:text-xl lg:text-2xl font-serif font-bold text-white mb-2 sm:mb-3">
-                      RSVP Confirmed!
-                    </h4>
-                    
-                    {/* Message based on RSVP response */}
-                    {formData.RSVP === "Yes" && (
-                      <div className="space-y-1 sm:space-y-1.5 mb-2 sm:mb-3">
-                        <p className="text-white/95 text-xs sm:text-sm font-medium">
-                          We're thrilled you'll be joining us!
-                        </p>
-                        <p className="text-white/80 text-[10px] sm:text-xs">
-                          Your response has been recorded
-                        </p>
-                      </div>
-                    )}
-                    {formData.RSVP === "No" && (
-                      <p className="text-white/90 text-xs sm:text-sm mb-2 sm:mb-3">
-                        We'll miss you, but thank you for letting us know.
-                      </p>
-                    )}
-                    {!formData.RSVP && (
-                      <p className="text-white/90 text-xs sm:text-sm mb-2 sm:mb-3">
-                        Thank you for your response!
-                      </p>
-                    )}
-                    
-                    {/* Subtle closing indicator */}
-                    <div className="flex items-center justify-center gap-1 sm:gap-1.5 mt-2 sm:mt-3">
-                      <div className="w-0.5 h-0.5 sm:w-1 sm:h-1 bg-white/60 rounded-full animate-pulse" />
-                      <p className="text-white/70 text-[10px] sm:text-xs">
-                        This will close automatically
-                      </p>
-                      <div className="w-0.5 h-0.5 sm:w-1 sm:h-1 bg-white/60 rounded-full animate-pulse" />
-                    </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {/* Error message */}
-              {error && !success && (
-                <div className="px-2 sm:px-2.5 md:px-4 lg:px-6 xl:px-8 pb-2 sm:pb-2.5 md:pb-4 lg:pb-6">
-                  <div className="bg-red-50 border-2 border-red-200 rounded-xl p-2 sm:p-2.5 md:p-3 lg:p-4">
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-red-600 flex-shrink-0" />
-                      <span className="text-red-600 font-semibold text-[10px] sm:text-xs md:text-sm">{error}</span>
+                  {/* Error message */}
+                  {error && !success && (
+                    <div className="px-2 sm:px-2.5 md:px-4 lg:px-6 xl:px-8 pb-2 sm:pb-2.5 md:pb-4 lg:pb-6">
+                      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-2 sm:p-2.5 md:p-3 lg:p-4">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-red-600 flex-shrink-0" />
+                          <span className="text-red-600 font-semibold text-[10px] sm:text-xs md:text-sm">{error}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
